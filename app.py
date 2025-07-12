@@ -8,9 +8,10 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Correct Gemini 1.0 Pro configuration
-genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
-model = genai.GenerativeModel('gemini-1.0-pro')  # Updated model name
+# Configure Gemini
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel('gemini-pro')
 
 conversations = {}
 
@@ -25,22 +26,22 @@ def home():
         today = datetime.now()
         days_remaining = (deadline_date - today).days
         
-        prompt = f"""Create a step-by-step plan:
+        prompt = f"""Create a detailed strategy to achieve:
         Goal: {goal}
-        Timeframe: {days_remaining} days
-        Daily Time: {free_time} hours
+        Deadline: {deadline} ({days_remaining} days remaining)
+        Daily Time Available: {free_time} hours
 
-        Include:
-        1. Weekly targets
-        2. Daily tasks
-        3. Potential roadblocks
-        4. Learning resources"""
+        Provide:
+        1. Weekly/Monthly milestones
+        2. Concrete daily actions
+        3. Potential obstacles and solutions
+        4. Recommended learning resources"""
         
         try:
             response = model.generate_content(prompt)
             strategy = response.text
         except Exception as e:
-            strategy = f"Error: {str(e)}"
+            strategy = f"Error generating strategy: {str(e)}"
         
         return render_template('index.html', 
                             goal=goal,
@@ -59,13 +60,13 @@ def chat():
     if session_id not in conversations:
         conversations[session_id] = []
     
-    conversations[session_id].append({"role": "user", "content": user_message})
+    conversations[session_id].append({"role": "user", "parts": [user_message]})
     
     try:
-        chat_session = model.start_chat(history=[])
-        response = chat_session.send_message(user_message)
-        conversations[session_id].append({"role": "model", "content": response.text})
-        return jsonify({'response': response.text, 'session_id': session_id})
+        response = model.generate_content(conversations[session_id])
+        ai_message = response.text
+        conversations[session_id].append({"role": "model", "parts": [ai_message]})
+        return jsonify({'response': ai_message, 'session_id': session_id})
     except Exception as e:
         return jsonify({'response': f"Error: {str(e)}", 'session_id': session_id})
 
