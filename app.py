@@ -74,3 +74,32 @@ def chat():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+def query_huggingface(prompt):
+    """Robust Hugging Face API call with error handling"""
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    
+    try:
+        response = requests.post(
+            HF_API_URL,
+            headers=headers,
+            json={"inputs": prompt},
+            timeout=30  # Wait longer for model to load
+        )
+        
+        # Check for empty response
+        if response.status_code != 200:
+            return f"API Error (HTTP {response.status_code}): {response.text}"
+            
+        data = response.json()
+        
+        # Handle Hugging Face's async model loading
+        if isinstance(data, dict) and "error" in data:
+            if "loading" in data["error"].lower():
+                return "Model is loading, please try again in 20 seconds."
+            return f"API Error: {data['error']}"
+            
+        return data[0]['generated_text']
+        
+    except Exception as e:
+        return f"Request Failed: {str(e)}"
