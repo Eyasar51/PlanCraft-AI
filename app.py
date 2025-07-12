@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify
-import google.generativeai as genai
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
 import os
 from datetime import datetime
 from dotenv import load_dotenv
@@ -8,10 +9,15 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Configure Gemini
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-pro')
+# Load Gemma 3B
+model_name = "google/gemma-3b-it"  # Instruction-tuned version
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
+
+def generate_response(prompt):
+    inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+    outputs = model.generate(**inputs, max_length=500)
+    return tokenizer.decode(outputs[0], skip_special_tokens=True)
 
 conversations = {}
 
@@ -26,49 +32,27 @@ def home():
         today = datetime.now()
         days_remaining = (deadline_date - today).days
         
-        prompt = f"""Create a detailed strategy to achieve:
-        Goal: {goal}
-        Deadline: {deadline} ({days_remaining} days remaining)
-        Daily Time Available: {free_time} hours
+        prompt = f"""<<SYS>>You are a goal-planning assistant. Provide:
+        1. Weekly milestones
+        2. Daily action items
+        3. Potential obstacles
+        <</SYS>>
 
-        Provide:
-        1. Weekly/Monthly milestones
-        2. Concrete daily actions
-        3. Potential obstacles and solutions
-        4. Recommended learning resources"""
+        Goal: {goal}
+        Deadline: {days_remaining} days
+        Daily Time: {free_time} hours"""
         
         try:
-            response = model.generate_content(prompt)
-            strategy = response.text
+            strategy = generate_response(prompt)
         except Exception as e:
-            strategy = f"Error generating strategy: {str(e)}"
+            strategy = f"Error: {str(e)}"
         
         return render_template('index.html', 
-                            goal=goal,
-                            deadline=deadline,
-                            free_time=free_time,
-                            strategy=strategy)
+                           goal=goal,
+                           deadline=deadline,
+                           free_time=free_time,
+                           strategy=strategy)
     
     return render_template('index.html')
 
-@app.route('/chat', methods=['POST'])
-def chat():
-    data = request.get_json()
-    user_message = data['message']
-    session_id = data.get('session_id', 'default')
-    
-    if session_id not in conversations:
-        conversations[session_id] = []
-    
-    conversations[session_id].append({"role": "user", "parts": [user_message]})
-    
-    try:
-        response = model.generate_content(conversations[session_id])
-        ai_message = response.text
-        conversations[session_id].append({"role": "model", "parts": [ai_message]})
-        return jsonify({'response': ai_message, 'session_id': session_id})
-    except Exception as e:
-        return jsonify({'response': f"Error: {str(e)}", 'session_id': session_id})
-
-if __name__ == '__main__':
-    app.run(debug=True)
+# ... (keep existing /chat endpoint logic)
