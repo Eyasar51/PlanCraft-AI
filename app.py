@@ -8,9 +8,9 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Configure Gemini
+# Correct Gemini 1.0 Pro configuration
 genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
-model = genai.GenerativeModel('gemini-pro')
+model = genai.GenerativeModel('gemini-1.0-pro')  # Updated model name
 
 conversations = {}
 
@@ -25,16 +25,16 @@ def home():
         today = datetime.now()
         days_remaining = (deadline_date - today).days
         
-        prompt = f"""Create a step-by-step plan to achieve this goal:
+        prompt = f"""Create a step-by-step plan:
         Goal: {goal}
-        Deadline: {days_remaining} days from now
-        Available time: {free_time} hours/day
+        Timeframe: {days_remaining} days
+        Daily Time: {free_time} hours
 
         Include:
-        1. Weekly milestones
-        2. Daily action items
-        3. Potential obstacles
-        4. Recommended resources"""
+        1. Weekly targets
+        2. Daily tasks
+        3. Potential roadblocks
+        4. Learning resources"""
         
         try:
             response = model.generate_content(prompt)
@@ -62,11 +62,10 @@ def chat():
     conversations[session_id].append({"role": "user", "content": user_message})
     
     try:
-        chat_session = model.start_chat(history=conversations[session_id])
+        chat_session = model.start_chat(history=[])
         response = chat_session.send_message(user_message)
-        ai_message = response.text
-        conversations[session_id].append({"role": "model", "content": ai_message})
-        return jsonify({'response': ai_message, 'session_id': session_id})
+        conversations[session_id].append({"role": "model", "content": response.text})
+        return jsonify({'response': response.text, 'session_id': session_id})
     except Exception as e:
         return jsonify({'response': f"Error: {str(e)}", 'session_id': session_id})
 
